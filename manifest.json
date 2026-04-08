@@ -1,0 +1,20 @@
+{
+  "name": "Mission Bananes",
+  "short_name": "Mission Bananes",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#fff9f0",
+  "theme_color": "#3ab86e",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
