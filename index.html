@@ -1037,7 +1037,7 @@ function saveCustomTask(kid){
     let fixedWeeks=undefined;
     if(period==='mensuel'){
       const wRaw=document.getElementById('new-task-week-'+kid)?.value;
-      fixedWeeks=wRaw?[parseInt(wRaw)]:undefined;
+      fixedWeeks=wRaw?[parseInt(wRaw)]:null;
     }else if(period==='bimensuel'){
       const checked=[...document.querySelectorAll('.new-task-week-cb-'+kid+':checked')];
       fixedWeeks=checked.length?checked.map(cb=>parseInt(cb.value)):[0,2];
@@ -1045,7 +1045,11 @@ function saveCustomTask(kid){
     if(!label){alert('Donnez un nom a la tache.');return;}
     if(!S['custom|'+kid])S['custom|'+kid]={};
     const id='ct'+Date.now();
-    S['custom|'+kid][id]={id,label,pts,period,custom:true,fixedDow,fixedWeeks};
+    // Firebase n'accepte pas undefined — on construit l'objet proprement
+    const taskObj={id,label,pts,period,custom:true};
+    if(fixedDow!==undefined)taskObj.fixedDow=fixedDow;
+    if(fixedWeeks!==undefined)taskObj.fixedWeeks=fixedWeeks;
+    S['custom|'+kid][id]=taskObj;
     saveS();renderParentPlanning();
   }catch(e){
     alert('Erreur lors de l ajout : '+e.message);
@@ -1230,7 +1234,7 @@ function refreshBadge(){
    KID VIEW
 ════════════════════════════════ */
 function buildKidView(){
-  if(!_viewDate)_viewDate=todayStr();
+  _viewDate=todayStr();
   buildShell([
     {id:'today',lbl:'Mon planning'},
     {id:'month',lbl:'Mon mois'},
