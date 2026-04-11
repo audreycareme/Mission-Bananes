@@ -715,7 +715,7 @@ function safeKidImg(kid){
 function kidPageIcon(kid){
   return '';
 }
-const PLBL={quotidien:'quotidien',hebdo:'hebdomadaire',mensuel:'mensuel',bimensuel:'2×/mois',semaine:'en semaine',we:'week-end'};
+const PLBL={quotidien:'quotidien',hebdo:'hebdomadaire',mensuel:'mensuel',bimensuel:'2×/mois',quinzaine:'toutes les 2 sem.',semaine:'en semaine',we:'week-end'};
 
 // Icônes par mot-clé dans le nom de la tâche
 const TASK_ICONS=[
@@ -826,7 +826,7 @@ const INDIV={
     {id:'sa7', label:'Nettoyer chambre à fond',                pts:20, period:'bimensuel'},
     {id:'sa8', label:'Laver le séjour',                 pts:10, period:'hebdo'},
     {id:'sa9', label:'Aller promener Tina 1/2 heure',                    pts:15, period:'hebdo'},
-    {id:'sa10',label:'Tondre partie jardin',                pts:80, period:'bimensuel'},
+    {id:'sa10',label:'Tondre partie jardin',                pts:80, period:'quinzaine'},
     {id:'sa11',label:'Préparer un repas du soir',               pts:10, period:'hebdo'},
     {id:'sa11b',label:'Faire la liste de course pour le repas du soir',             pts:0,  period:'hebdo'},
     {id:'sa12',label:'Nettoyer la litière de Zelda',              pts:5,  period:'hebdo'},
@@ -1099,6 +1099,18 @@ const BIMENSUEL_WEEKS={
   'el_pou':[0,2], // Sortir poubelles : sem 1 et 3 (dim)
 };
 
+// Tâches quinzaine : toutes les 2 semaines à partir d'une date de référence
+const QUINZAINE_REF={
+  'sa10':'2026-04-12',
+};
+function isQuinzaineDay(tid,date){
+  const ref=QUINZAINE_REF[tid];
+  if(!ref)return false;
+  const d=new Date(date+'T12:00:00');
+  const r=new Date(ref+'T12:00:00');
+  const diff=Math.round((d-r)/86400000);
+  return diff>=0&&diff%14===0;
+}
 function weekOfMonth(date){
   const d=new Date(date+'T12:00:00');
   const first=new Date(d.getFullYear(),d.getMonth(),1);
@@ -1150,6 +1162,11 @@ function tasksForDay(kid,date){
       const wom=weekOfMonth(date);
       const allowed=t.fixedWeeks||BIMENSUEL_WEEKS[t.id]||[0,2];
       if((dow===fixedDow&&allowed.includes(wom))||['ok','prov'].includes(iSt(kid,t.id,date)))
+        tasks.push({...t,isCommon:false});
+      return;
+    }
+    if(t.period==='quinzaine'){
+      if(isQuinzaineDay(t.id,date)||['ok','prov'].includes(iSt(kid,t.id,date)))
         tasks.push({...t,isCommon:false});
       return;
     }
@@ -1234,7 +1251,7 @@ function refreshBadge(){
    KID VIEW
 ════════════════════════════════ */
 function buildKidView(){
-  _viewDate=todayStr();
+  if(!_viewDate)_viewDate=todayStr();
   buildShell([
     {id:'today',lbl:'Mon planning'},
     {id:'month',lbl:'Mon mois'},
@@ -2346,7 +2363,7 @@ function submitPwdChange(){
    LOGIN / LOGOUT
 ════════════════════════════════ */
 function login(user){
-  ME=user;localStorage.setItem(UK,user);loadS();
+  ME=user;localStorage.setItem(UK,user);if(typeof loadS==='function')loadS();else{try{S=JSON.parse(localStorage.getItem('nostaches_fun_v1')||'{}');}catch(e){S={};}}
   document.getElementById('sw').style.display='none';
   document.getElementById('sm').style.display='flex';
   const kc=KC[user];
@@ -2363,7 +2380,7 @@ function login(user){
   document.getElementById('topbar').className=`topbar ${kc}-bar`;
   document.getElementById('tb-name').textContent=user;
   document.getElementById('tb-date').textContent=fmtDay(todayStr());
-  setSd('ok');_viewDate=todayStr();_planWk=wkKey();
+  setSd('ok');_viewDate=null;_planWk=wkKey();
   if(user==='Parents')buildParentView();else buildKidView();
 }
 function logout(){
