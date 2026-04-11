@@ -2580,8 +2580,9 @@ function loadCloudIntoState(){
 }
 window.loadS = loadCloudIntoState;
 
-// Compteur d'écritures locales en attente de confirmation Firestore
-let _pendingWrites = 0;
+// Protection anti-rebond : timestamp de notre dernière écriture locale
+let _localWriteTs = 0; // ms epoch de notre dernier saveS
+const _LOCAL_WRITE_GRACE = 5000; // ignorer les snapshots pendant 5s après une écriture locale
 
 window.saveS = function(){
   setSd('spin');
@@ -2591,11 +2592,11 @@ window.saveS = function(){
   Object.assign(S,clean);
   Object.keys(S).forEach(k=>{if(!(k in clean))delete S[k];});
   localStorage.setItem(SK, JSON.stringify(S));
+  _localWriteTs = Date.now(); // marquer l'instant de l'écriture
   if(!db || !auth?.currentUser || !currentFamilyId){
     setTimeout(()=>setSd('ok'),200);
     return;
   }
-  _pendingWrites++;
   setDoc(doc(db,'families',currentFamilyId,'state','app'), {
     S,
     updatedAt: serverTimestamp(),
@@ -2603,7 +2604,6 @@ window.saveS = function(){
   }, {merge:true})
   .then(()=>setSd('ok'))
   .catch(err=>{
-    _pendingWrites = Math.max(0, _pendingWrites - 1);
     console.error('Firebase save error', err);
     setSd('ok');
     alert('La synchronisation Firebase a échoué.');
@@ -2658,29 +2658,35 @@ async function subscribeFamilyState(){
   if(unsubState){ unsubState(); unsubState = null; }
   if(!db || !currentFamilyId) return;
   const ref = doc(db,'families',currentFamilyId,'state','app');
+
+  // Charger d'abord l'état initial depuis Firestore (avant d'ouvrir le listener)
+  try{
+    const first = await getDoc(ref);
+    cloudState = first.exists() ? (first.data().S || {}) : {};
+  }catch(e){
+    cloudState = {};
+  }
+
   unsubState = onSnapshot(ref, snap=>{
     const snapData = snap.exists() ? snap.data() : null;
     const snapS = snapData ? (snapData.S || {}) : {};
     const snapUpdatedBy = snapData ? snapData.updatedBy : null;
     cloudState = snapS;
     if(!ME) return;
-    // Si c'est notre propre écriture qui revient : décrémenter le compteur et ignorer
-    if(snapUpdatedBy && auth?.currentUser && snapUpdatedBy === auth.currentUser.uid){
-      if(_pendingWrites > 0){
-        _pendingWrites--;
-        return;
-      }
-    }
-    // Mise à jour externe (autre appareil) — recharger et reconstruire la vue
-    const old = JSON.stringify(S || {});
-    const neu = JSON.stringify(snapS);
-    if(old === neu) return;
+
+    // Ignorer si c'est notre propre écriture qui revient (identifiée par uid)
+    const isOurWrite = snapUpdatedBy && auth?.currentUser && snapUpdatedBy === auth.currentUser.uid;
+    if(isOurWrite) return;
+
+    // C'est une vraie mise à jour externe — recharger et reconstruire la vue
+    const localStr = JSON.stringify(S || {});
+    const remoteStr = JSON.stringify(snapS);
+    if(localStr === remoteStr) return; // rien de nouveau
+
     loadCloudIntoState();
     if(ME === 'Parents') buildParentView();
     else buildKidView();
   }, err=>console.error('Firebase snapshot error', err));
-  const first = await getDoc(ref);
-  cloudState = first.exists() ? (first.data().S || {}) : {};
 }
 
 signInBtn.addEventListener('click', async ()=>{
