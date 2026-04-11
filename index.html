@@ -821,7 +821,7 @@ const INDIV={
   Sacha:[
     {id:'sa3', label:'Faire son lit correctement + aérer sa chambre',          pts:2,  period:'quotidien'},
     {id:'sa4', label:'Laver + sécher draps + refaire lit',     pts:15, period:'hebdo'},
-    {id:'sa5', label:"Aspirateur chambre",                     pts:7,  period:'bimensuel'},
+    {id:'sa5', label:"Aspirateur chambre",                     pts:7,  period:'quinzaine'},
     {id:'sa6', label:'Faire son repassage',                    pts:20, period:'hebdo'},
     {id:'sa7', label:'Nettoyer chambre à fond',                pts:20, period:'bimensuel'},
     {id:'sa8', label:'Laver le séjour',                 pts:10, period:'hebdo'},
@@ -831,7 +831,7 @@ const INDIV={
     {id:'sa11b',label:'Faire la liste de course pour le repas du soir',             pts:0,  period:'hebdo'},
     {id:'sa12',label:'Nettoyer la litière de Zelda',              pts:5,  period:'hebdo'},
     {id:'sa1', label:'Plier + ranger sous-vêtements',          pts:15, period:'hebdo'},
-    {id:'sa_ram',label:'Ramener les poubelles',                pts:4,  period:'bimensuel'},
+    {id:'sa_ram',label:'Ramener les poubelles',                pts:4,  period:'quinzaine'},
   ],
   Elsa:[
     {id:'el1', label:'Faire son lit correctement + aérer sa chambre',          pts:2,  period:'quotidien'},
@@ -841,19 +841,19 @@ const INDIV={
     {id:'el5', label:'Nettoyer chambre à fond',                pts:20, period:'mensuel'},
     {id:'el6', label:"Aspirateur séjour",                      pts:10, period:'hebdo'},
     {id:'el7', label:'Promener Jack (½h)',                    pts:15, period:'hebdo'},
-    {id:'el8', label:"Nettoyer intérieur 208 + vitres",        pts:65, period:'mensuel'},
-    {id:'el9', label:"Nettoyer intérieur 5008 + vitres",       pts:65, period:'mensuel'},
+    {id:'el8', label:"Nettoyer intérieur 208 + vitres",        pts:65, period:'quinzaine'},
+    {id:'el9', label:"Nettoyer intérieur 5008 + vitres",       pts:65, period:'quinzaine'},
     {id:'el10',label:'Préparer un repas du soir',                pts:10, period:'hebdo'},
     {id:'el10b',label:'Faire la liste de course pour le repas du soir',             pts:0,  period:'hebdo'},
-    {id:'el_pou',label:'Sortir les poubelles',                 pts:4,  period:'bimensuel'},
-    {id:'el_asp',label:"Aspirateur parties communes étages",   pts:10, period:'hebdo'},
+    {id:'el_pou',label:'Sortir les poubelles',                 pts:4,  period:'quinzaine'},
+    {id:'el_asp',label:"Aspirateur parties communes étages",   pts:10, period:'quinzaine'},
   ],
   Sarah:[
     {id:'sr1', label:'Faire son lit',                          pts:4,  period:'quotidien'},
     {id:'sr2', label:'Ranger sa chambre',                      pts:5,  period:'hebdo'},
     {id:'sr3', label:'Aider Elsa — chambre à fond',            pts:10, period:'mensuel'},
-    {id:'sr4', label:"Aider Elsa — intérieur 208",             pts:15, period:'mensuel'},
-    {id:'sr5', label:"Aider Elsa — intérieur 5008",            pts:15, period:'mensuel'},
+    {id:'sr4', label:"Aider Elsa — intérieur 208",             pts:15, period:'quinzaine'},
+    {id:'sr5', label:"Aider Elsa — intérieur 5008",            pts:15, period:'quinzaine'},
   ],
 };
 
@@ -1101,7 +1101,15 @@ const BIMENSUEL_WEEKS={
 
 // Tâches quinzaine : toutes les 2 semaines à partir d'une date de référence
 const QUINZAINE_REF={
-  'sa10':'2026-04-12',
+  'sa5' :'2026-04-05', // Aspirateur chambre Sacha — dim 5 avril
+  'sa10':'2026-04-12', // Tondre jardin — dim 12 avril
+  'sa_ram':'2026-04-06', // Ramener poubelles — lun 6 avril
+  'el_pou':'2026-04-05', // Sortir poubelles — dim 5 avril
+  'el8' :'2026-04-12', // Nettoyer 208 — dim 12 avril
+  'el9' :'2026-04-05', // Nettoyer 5008 — dim 5 avril
+  'el_asp':'2026-04-12', // Aspirateur communs — dim 12 avril
+  'sr4' :'2026-04-12', // Aider Elsa 208 — dim 12 avril
+  'sr5' :'2026-04-05', // Aider Elsa 5008 — dim 5 avril
 };
 function isQuinzaineDay(tid,date){
   const ref=QUINZAINE_REF[tid];
@@ -1892,9 +1900,35 @@ function validateAll(kid){
   saveS();renderParentValidation();
 }
 
+function prevMkFn(mk){
+  const[y,mo]=mk.split('-').map(Number);
+  return mo===1?(y-1)+'-12':`${y}-${String(mo-1).padStart(2,'0')}`;
+}
+function moisLabel(mk){
+  const[y,mo]=mk.split('-').map(Number);
+  const M=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return M[mo-1]+' '+y;
+}
 function renderParentBilan(){
-  const mk=mKey(),wk=wkKey();
+  const mk=mKey(),wk=wkKey(),pmk=prevMkFn(mk);
   let h='';
+
+  // Bandeau virement — montants mois précédent
+  const virDay=new Date().getDate();
+  const virLabel=virDay<=5?`⚠️ Virement à faire avant le 5`:`✓ Virement du mois passé effectué`;
+  h+=`<div style="background:linear-gradient(135deg,#1a1a2e,#2d2d4e);border-radius:var(--r);padding:14px 16px;margin-bottom:1rem;box-shadow:var(--shadow)">
+    <div style="font-size:12px;font-weight:800;color:rgba(255,255,255,.5);margin-bottom:8px">💸 ${virLabel} — ${moisLabel(pmk)}</div>
+    <div style="display:flex;flex-direction:column;gap:6px">`;
+  KIDS.forEach(kid=>{
+    const kc=KC[kid];
+    const{ok:okP}=earnedMonth(kid,pmk);
+    h+=`<div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px">${kidAvatar(kid,"24px")}<span style="font-size:13px;font-weight:800;color:#fff">${kid}</span></div>
+      <span style="font-size:16px;font-weight:900;color:var(--${kc==='sa'?'sa':kc==='el'?'el':'sr'})">${okP.toFixed(2).replace('.',',')} €</span>
+    </div>`;
+  });
+  h+=`</div></div>`;
+
   KIDS.forEach(kid=>{
     const ew=earnedWeek(kid,wk),em=earnedMonth(kid,mk);
     const bud=BUDGETS[kid];
@@ -1906,14 +1940,15 @@ function renderParentBilan(){
           <div class="bcard-av ${kc}-av">${kidAvatar(kid,"28px")}</div>
           <div>
             <div class="bcard-name">${kid}</div>
-            <div class="bcard-sub">Mois : ${em.ok.toFixed(2).replace('.',',')} €${em.prov>0?` · en attente : ${em.prov.toFixed(2).replace('.',',')} €`:''}</div>
+            <div class="bcard-sub">Ce mois : ${em.ok.toFixed(2).replace('.',',')} €${em.prov>0?` · en attente : ${em.prov.toFixed(2).replace('.',',')} €`:''}</div>
           </div>
         </div>${chevSvg(open)}
       </div>
       <div class="bcard-body${open?' on':''}" id="bb-${kid}">
         <div class="ptabs">
           <button class="ptab${_bilanPer[kid]==='week'?' on':''}" onclick="setBP('${kid}','week')">Semaine</button>
-          <button class="ptab${_bilanPer[kid]==='month'?' on':''}" onclick="setBP('${kid}','month')">Mois</button>
+          <button class="ptab${_bilanPer[kid]==='month'?' on':''}" onclick="setBP('${kid}','month')">Mois en cours</button>
+          <button class="ptab${_bilanPer[kid]==='prevmonth'?' on':''}" onclick="setBP('${kid}','prevmonth')">Mois précédent</button>
         </div>
         <div id="bp-${kid}">${bilanContent(kid,_bilanPer[kid],mk,wk)}</div>
       </div>
@@ -1925,10 +1960,33 @@ function renderParentBilan(){
 
 function bilanContent(kid,per,mk,wk){
   const isW=per==='week';
-  const{ok,prov}=isW?earnedWeek(kid,wk):earnedMonth(kid,mk||mKey());
+  const isPrev=per==='prevmonth';
+  const targetMk=isPrev?prevMkFn(mk||mKey()):(mk||mKey());
+  const{ok,prov}=isW?earnedWeek(kid,wk):earnedMonth(kid,targetMk);
   const bud=BUDGETS[kid],pctOk=Math.min(100,ok/bud*100),surplus=Math.max(0,ok-bud);
   const kc=KC[kid];
-  const filterFn=isW?d=>wkKey(d)===wk:d=>mKey(d)===(mk||mKey());
+  const filterFn=isW?d=>wkKey(d)===wk:d=>mKey(d)===targetMk;
+  if(isPrev){
+    // Bandeau mois précédent avec montant à virer
+    let h=`<div style="background:var(--${kc}-l);border-radius:var(--rsm);padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;font-weight:800;color:var(--${kc}-d)">${moisLabel(targetMk)}</span>
+      <span style="font-size:18px;font-weight:900;color:var(--${kc}-d)">💸 ${ok.toFixed(2).replace('.',',')} €</span>
+    </div>`;
+    (INDIV[kid]||[]).forEach(t=>{
+      const okC=Object.keys(S).filter(k=>k.startsWith('i|'+kid+'|'+t.id+'|')&&filterFn(k.split('|')[3])&&S[k]==='ok').length;
+      if(okC>0){
+        const icon=taskIcon(t.label);
+        h+=`<div class="tc" style="cursor:default;padding:9px 13px;margin-bottom:4px">
+          <div class="ticon ${kc}-ic" style="width:32px;height:32px;font-size:16px">${icon}</div>
+          <div class="tbd">
+            <div class="tn" style="font-size:13px">${t.label}</div>
+            <div class="tm">${PLBL[t.period]} · <strong>${okC}×</strong> validé · ${(okC*t.pts*0.1).toFixed(2).replace('.',',')} €</div>
+          </div>
+        </div>`;
+      }
+    });
+    return h;
+  }
   let h=`<div class="${kc}-bar">
     <div class="prog-dbl">
       <div class="prog-dbl-ok" style="width:${pctOk.toFixed(1)}%"></div>
@@ -1962,7 +2020,8 @@ function setBP(kid,per){
   const el=document.getElementById('bp-'+kid);if(el)el.innerHTML=bilanContent(kid,per,mKey(),wkKey());
   const body=document.getElementById('bb-'+kid);
   if(body)body.querySelectorAll('.ptab').forEach(b=>{
-    b.className='ptab'+((b.textContent.includes('Sem')&&per==='week')||(b.textContent.includes('Mois')&&per==='month')?' on':'');
+    const t=b.textContent;
+    b.className='ptab'+((t.includes('Sem')&&per==='week')||(t.includes('cours')&&per==='month')||(t.includes('précédent')&&per==='prevmonth')?' on':'');
   });
 }
 
