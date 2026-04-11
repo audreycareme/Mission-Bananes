@@ -2580,7 +2580,8 @@ function loadCloudIntoState(){
 }
 window.loadS = loadCloudIntoState;
 
-let _lastSavedState = null;
+// Compteur d'écritures locales en attente de confirmation Firestore
+let _pendingWrites = 0;
 
 window.saveS = function(){
   setSd('spin');
@@ -2590,11 +2591,11 @@ window.saveS = function(){
   Object.assign(S,clean);
   Object.keys(S).forEach(k=>{if(!(k in clean))delete S[k];});
   localStorage.setItem(SK, JSON.stringify(S));
-  _lastSavedState = JSON.stringify(S);
   if(!db || !auth?.currentUser || !currentFamilyId){
     setTimeout(()=>setSd('ok'),200);
     return;
   }
+  _pendingWrites++;
   setDoc(doc(db,'families',currentFamilyId,'state','app'), {
     S,
     updatedAt: serverTimestamp(),
@@ -2602,6 +2603,7 @@ window.saveS = function(){
   }, {merge:true})
   .then(()=>setSd('ok'))
   .catch(err=>{
+    _pendingWrites = Math.max(0, _pendingWrites - 1);
     console.error('Firebase save error', err);
     setSd('ok');
     alert('La synchronisation Firebase a échoué.');
@@ -2657,29 +2659,21 @@ async function subscribeFamilyState(){
   if(!db || !currentFamilyId) return;
   const ref = doc(db,'families',currentFamilyId,'state','app');
   unsubState = onSnapshot(ref, snap=>{
-    cloudState = snap.exists() ? (snap.data().S || {}) : {};
+    const snapData = snap.exists() ? snap.data() : null;
+    const snapS = snapData ? (snapData.S || {}) : {};
+    const snapUpdatedBy = snapData ? snapData.updatedBy : null;
+    cloudState = snapS;
     if(!ME) return;
-    // ignorer si c'est notre propre écriture qui revient
-    const snapS = snap.exists() ? (snap.data().S || {}) : {};
-    const snapUpdatedBy = snap.exists() ? snap.data().updatedBy : null;
+    // Si c'est notre propre écriture qui revient : décrémenter le compteur et ignorer
     if(snapUpdatedBy && auth?.currentUser && snapUpdatedBy === auth.currentUser.uid){
-      // Normaliser snapS pour comparer (même tri de clés)
-      const snapNorm = JSON.stringify(snapS);
-      const localNorm = _lastSavedState;
-      if(localNorm && snapNorm === localNorm){
-        _lastSavedState = null;
-        return;
-      }
-      // Si c'est notre écriture mais état légèrement différent (clés supprimées),
-      // on met juste à jour cloudState sans reconstruire la vue
-      if(localNorm){
-        cloudState = snapS;
-        _lastSavedState = null;
+      if(_pendingWrites > 0){
+        _pendingWrites--;
         return;
       }
     }
+    // Mise à jour externe (autre appareil) — recharger et reconstruire la vue
     const old = JSON.stringify(S || {});
-    const neu = JSON.stringify(cloudState || {});
+    const neu = JSON.stringify(snapS);
     if(old === neu) return;
     loadCloudIntoState();
     if(ME === 'Parents') buildParentView();
