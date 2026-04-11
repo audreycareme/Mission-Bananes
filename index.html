@@ -1016,20 +1016,40 @@ function toggleAddTask(kid){
 }
 function toggleDayField(kid){
   const period=document.getElementById('new-task-period-'+kid)?.value;
-  const wrap=document.getElementById('new-task-day-wrap-'+kid);
-  if(wrap)wrap.style.display=period==='quotidien'?'none':'block';
+  const wrapDay=document.getElementById('new-task-day-wrap-'+kid);
+  const wrapWeek=document.getElementById('new-task-week-wrap-'+kid);
+  if(wrapDay)wrapDay.style.display=period==='quotidien'?'none':'block';
+  if(wrapWeek){
+    wrapWeek.style.display=(period==='mensuel'||period==='bimensuel')?'block':'none';
+    const secM=wrapWeek.querySelector('.week-mensuel-'+kid);
+    const secB=wrapWeek.querySelector('.week-bimensuel-'+kid);
+    if(secM)secM.style.display=period==='mensuel'?'block':'none';
+    if(secB)secB.style.display=period==='bimensuel'?'flex':'none';
+  }
 }
 function saveCustomTask(kid){
-  const label=document.getElementById('new-task-label-'+kid)?.value?.trim();
-  const pts=parseInt(document.getElementById('new-task-pts-'+kid)?.value)||10;
-  const period=document.getElementById('new-task-period-'+kid)?.value||'hebdo';
-  const dowRaw=document.getElementById('new-task-dow-'+kid)?.value;
-  const fixedDow=period==='quotidien'?undefined:parseInt(dowRaw??'1');
-  if(!label){alert('Donnez un nom à la tâche.');return;}
-  if(!S['custom|'+kid])S['custom|'+kid]={};
-  const id='ct'+Date.now();
-  S['custom|'+kid][id]={id,label,pts,period,custom:true,fixedDow};
-  saveS();renderParentPlanning();
+  try{
+    const label=document.getElementById('new-task-label-'+kid)?.value?.trim();
+    const pts=parseInt(document.getElementById('new-task-pts-'+kid)?.value)||10;
+    const period=document.getElementById('new-task-period-'+kid)?.value||'hebdo';
+    const dowRaw=document.getElementById('new-task-dow-'+kid)?.value;
+    const fixedDow=period==='quotidien'?undefined:parseInt(dowRaw??'1');
+    let fixedWeeks=undefined;
+    if(period==='mensuel'){
+      const wRaw=document.getElementById('new-task-week-'+kid)?.value;
+      fixedWeeks=wRaw?[parseInt(wRaw)]:undefined;
+    }else if(period==='bimensuel'){
+      const checked=[...document.querySelectorAll('.new-task-week-cb-'+kid+':checked')];
+      fixedWeeks=checked.length?checked.map(cb=>parseInt(cb.value)):[0,2];
+    }
+    if(!label){alert('Donnez un nom a la tache.');return;}
+    if(!S['custom|'+kid])S['custom|'+kid]={};
+    const id='ct'+Date.now();
+    S['custom|'+kid][id]={id,label,pts,period,custom:true,fixedDow,fixedWeeks};
+    saveS();renderParentPlanning();
+  }catch(e){
+    alert('Erreur lors de l ajout : '+e.message);
+  }
 }
 // Jours fixes pour chaque tâche (0=dim,1=lun,2=mar,3=mer,4=jeu,5=ven,6=sam)
 const FIXED_DAY={
@@ -1111,17 +1131,20 @@ function tasksForDay(kid,date){
     }
     if(t.period==='mensuel'){
       if(fixedDow===undefined)return;
+      const wom=weekOfMonth(date);
+      const allowedW=t.fixedWeeks||null;
       const done=Object.keys(S).some(k=>
         k.startsWith('i|'+kid+'|'+t.id+'|')&&
         mKey(k.split('|')[3])===mk&&['ok','prov'].includes(S[k]));
-      if((!done&&dow===fixedDow)||['ok','prov'].includes(iSt(kid,t.id,date)))
+      const rightWeek=!allowedW||allowedW.includes(wom);
+      if((!done&&dow===fixedDow&&rightWeek)||['ok','prov'].includes(iSt(kid,t.id,date)))
         tasks.push({...t,isCommon:false});
       return;
     }
     if(t.period==='bimensuel'){
       if(fixedDow===undefined)return;
       const wom=weekOfMonth(date);
-      const allowed=BIMENSUEL_WEEKS[t.id]||[0,2];
+      const allowed=t.fixedWeeks||BIMENSUEL_WEEKS[t.id]||[0,2];
       if((dow===fixedDow&&allowed.includes(wom))||['ok','prov'].includes(iSt(kid,t.id,date)))
         tasks.push({...t,isCommon:false});
       return;
@@ -1207,7 +1230,7 @@ function refreshBadge(){
    KID VIEW
 ════════════════════════════════ */
 function buildKidView(){
-  _viewDate=todayStr();
+  if(!_viewDate)_viewDate=todayStr();
   buildShell([
     {id:'today',lbl:'Mon planning'},
     {id:'month',lbl:'Mon mois'},
@@ -2053,6 +2076,23 @@ function renderParentPlanning(){
           <option value="6">Samedi</option>
           <option value="0">Dimanche</option>
         </select>
+      </div>
+      <div id="new-task-week-wrap-${kid}" style="display:none;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:6px">Quelle(s) semaine(s) du mois ?</div>
+        <div class="week-mensuel-${kid}" style="display:none">
+          <select id="new-task-week-${kid}" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 10px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+            <option value="0">1re semaine</option>
+            <option value="1">2e semaine</option>
+            <option value="2">3e semaine</option>
+            <option value="3">4e semaine</option>
+          </select>
+        </div>
+        <div class="week-bimensuel-${kid}" style="display:none;display:flex;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--tx2)"><input type="checkbox" class="new-task-week-cb-${kid}" value="0" checked> Sem 1</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--tx2)"><input type="checkbox" class="new-task-week-cb-${kid}" value="1"> Sem 2</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--tx2)"><input type="checkbox" class="new-task-week-cb-${kid}" value="2" checked> Sem 3</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--tx2)"><input type="checkbox" class="new-task-week-cb-${kid}" value="3"> Sem 4</label>
+        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="saveCustomTask('${kid}')" style="flex:1;padding:10px;background:var(--${kc});color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
