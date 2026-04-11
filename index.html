@@ -945,7 +945,8 @@ function earnedFor(kid,filterFn){
   Object.keys(S).filter(k=>k.startsWith('i|'+kid+'|')).forEach(k=>{
     const parts=k.split('|'),date=parts[3],st=S[k];
     if(filterFn&&!filterFn(date))return;
-    const t=(INDIV[kid]||[]).find(x=>x.id===parts[2]);
+    const kid=parts[1],tid=parts[2];
+    const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid);
     if(!t)return;
     if(st==='ok'){okPt+=t.pts;pochePt+=ptsToPoche(t.pts,date);potPt+=ptsToPot(t.pts,date);}
     else if(st==='prov')provPt+=t.pts;
@@ -1013,14 +1014,21 @@ function toggleAddTask(kid){
   const f=document.getElementById('add-form-'+kid);
   if(f){f.style.display=f.style.display==='none'?'block':'none';}
 }
+function toggleDayField(kid){
+  const period=document.getElementById('new-task-period-'+kid)?.value;
+  const wrap=document.getElementById('new-task-day-wrap-'+kid);
+  if(wrap)wrap.style.display=period==='quotidien'?'none':'block';
+}
 function saveCustomTask(kid){
   const label=document.getElementById('new-task-label-'+kid)?.value?.trim();
   const pts=parseInt(document.getElementById('new-task-pts-'+kid)?.value)||10;
   const period=document.getElementById('new-task-period-'+kid)?.value||'hebdo';
+  const dowRaw=document.getElementById('new-task-dow-'+kid)?.value;
+  const fixedDow=period==='quotidien'?undefined:parseInt(dowRaw??'1');
   if(!label){alert('Donnez un nom à la tâche.');return;}
   if(!S['custom|'+kid])S['custom|'+kid]={};
   const id='ct'+Date.now();
-  S['custom|'+kid][id]={id,label,pts,period,custom:true};
+  S['custom|'+kid][id]={id,label,pts,period,custom:true,fixedDow};
   saveS();renderParentPlanning();
 }
 // Jours fixes pour chaque tâche (0=dim,1=lun,2=mar,3=mer,4=jeu,5=ven,6=sam)
@@ -1089,7 +1097,7 @@ function tasksForDay(kid,date){
 
   // Tâches individuelles — UNIQUEMENT le jour fixé
   getTasksFor(kid).filter(t=>!isTaskDisabled(kid,t.id)).forEach(t=>{
-    const fixedDow=FIXED_DAY[t.id];
+    const fixedDow= t.fixedDow!==undefined ? t.fixedDow : FIXED_DAY[t.id];
 
     if(t.period==='quotidien'){
       tasks.push({...t,isCommon:false});
@@ -1709,7 +1717,7 @@ function renderParentValidation(){
       const[,kid,tid,date]=k.split('|');
       if(date>today)return;
       if(date<cutoffPastStr)return; // ignorer les entrées de plus de 7 jours
-      const t=(INDIV[kid]||[]).find(x=>x.id===tid);
+      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid);
       if(t)pending.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts});
     }
     if(k.startsWith('cc|')&&S[k]?.st==='prov'){
@@ -1732,7 +1740,7 @@ function renderParentValidation(){
     if(k.startsWith('i|')&&S[k]==='ok'){
       const[,kid,tid,date]=k.split('|');
       if(date<cutoffStr)return;
-      const t=(INDIV[kid]||[]).find(x=>x.id===tid);
+      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid);
       if(t)validated.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts});
     }
     if(k.startsWith('cc|')&&S[k]?.st==='ok'){
@@ -2026,13 +2034,25 @@ function renderParentPlanning(){
         </div>
         <div>
           <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Fréquence</div>
-          <select id="new-task-period-${kid}" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 10px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+          <select id="new-task-period-${kid}" onchange="toggleDayField('${kid}')" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 10px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
             <option value="quotidien">Quotidien</option>
             <option value="hebdo" selected>Hebdomadaire</option>
             <option value="mensuel">Mensuel</option>
             <option value="bimensuel">2× par mois</option>
           </select>
         </div>
+      </div>
+      <div id="new-task-day-wrap-${kid}" style="margin-bottom:8px">
+        <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Quel jour ?</div>
+        <select id="new-task-dow-${kid}" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 10px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+          <option value="1">Lundi</option>
+          <option value="2">Mardi</option>
+          <option value="3">Mercredi</option>
+          <option value="4">Jeudi</option>
+          <option value="5">Vendredi</option>
+          <option value="6">Samedi</option>
+          <option value="0">Dimanche</option>
+        </select>
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="saveCustomTask('${kid}')" style="flex:1;padding:10px;background:var(--${kc});color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
