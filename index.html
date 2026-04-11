@@ -2581,6 +2581,7 @@ function loadCloudIntoState(){
 window.loadS = loadCloudIntoState;
 
 let _lastSavedState = null;
+let _ignoreSnapshotUntil = 0; // timestamp ms — bloque rebuild vue après action locale
 
 window.saveS = function(){
   setSd('spin');
@@ -2591,6 +2592,7 @@ window.saveS = function(){
   Object.keys(S).forEach(k=>{if(!(k in clean))delete S[k];});
   localStorage.setItem(SK, JSON.stringify(S));
   _lastSavedState = JSON.stringify(S);
+  _ignoreSnapshotUntil = Date.now() + 3000; // bloquer rebuild pendant 3s
   if(!db || !auth?.currentUser || !currentFamilyId){
     setTimeout(()=>setSd('ok'),200);
     return;
@@ -2682,6 +2684,11 @@ async function subscribeFamilyState(){
     const neu = JSON.stringify(cloudState || {});
     if(old === neu) return;
     loadCloudIntoState();
+    if(Date.now() < _ignoreSnapshotUntil){
+      // Action locale récente — on met à jour les données sans reconstruire la vue
+      loadCloudIntoState();
+      return;
+    }
     if(ME === 'Parents') buildParentView();
     else buildKidView();
   }, err=>console.error('Firebase snapshot error', err));
