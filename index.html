@@ -2584,6 +2584,11 @@ let _lastSavedState = null;
 
 window.saveS = function(){
   setSd('spin');
+  // Nettoyage : supprimer les clés undefined/null avant sauvegarde
+  const clean={};
+  Object.keys(S).forEach(k=>{if(S[k]!==null&&S[k]!==undefined)clean[k]=S[k];});
+  Object.assign(S,clean);
+  Object.keys(S).forEach(k=>{if(!(k in clean))delete S[k];});
   localStorage.setItem(SK, JSON.stringify(S));
   _lastSavedState = JSON.stringify(S);
   if(!db || !auth?.currentUser || !currentFamilyId){
@@ -2658,7 +2663,17 @@ async function subscribeFamilyState(){
     const snapS = snap.exists() ? (snap.data().S || {}) : {};
     const snapUpdatedBy = snap.exists() ? snap.data().updatedBy : null;
     if(snapUpdatedBy && auth?.currentUser && snapUpdatedBy === auth.currentUser.uid){
-      if(_lastSavedState && JSON.stringify(snapS) === _lastSavedState){
+      // Normaliser snapS pour comparer (même tri de clés)
+      const snapNorm = JSON.stringify(snapS);
+      const localNorm = _lastSavedState;
+      if(localNorm && snapNorm === localNorm){
+        _lastSavedState = null;
+        return;
+      }
+      // Si c'est notre écriture mais état légèrement différent (clés supprimées),
+      // on met juste à jour cloudState sans reconstruire la vue
+      if(localNorm){
+        cloudState = snapS;
         _lastSavedState = null;
         return;
       }
