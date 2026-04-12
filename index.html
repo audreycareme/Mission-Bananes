@@ -2483,7 +2483,7 @@ import {
   updatePassword, EmailAuthProvider, reauthenticateWithCredential
 } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp, deleteField
+  getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -2585,8 +2585,6 @@ let _localWriteTs = 0; // ms epoch de notre dernier saveS
 const _LOCAL_WRITE_GRACE = 5000; // ignorer les snapshots pendant 5s après une écriture locale
 
 // Snapshot Firestore précédent — pour détecter les clés supprimées
-let _prevFirestoreKeys = null;
-
 window.saveS = function(){
   setSd('spin');
   // Nettoyage : supprimer les clés undefined/null avant sauvegarde
@@ -2600,19 +2598,13 @@ window.saveS = function(){
     setTimeout(()=>setSd('ok'),200);
     return;
   }
-  // Construire le payload : valeurs normales + deleteField() pour les clés supprimées
-  const payload = {...S};
-  if(_prevFirestoreKeys){
-    _prevFirestoreKeys.forEach(k=>{
-      if(!(k in S)) payload[k] = deleteField();
-    });
-  }
-  _prevFirestoreKeys = Object.keys(S);
+  // Écriture complète (sans merge) pour que les suppressions de clés
+  // soient bien propagées dans Firestore
   setDoc(doc(db,'families',currentFamilyId,'state','app'), {
-    S: payload,
+    S,
     updatedAt: serverTimestamp(),
     updatedBy: auth.currentUser.uid
-  }, {merge:true})
+  })
   .then(()=>setSd('ok'))
   .catch(err=>{
     console.error('Firebase save error', err);
@@ -2677,9 +2669,6 @@ async function subscribeFamilyState(){
   }catch(e){
     cloudState = {};
   }
-
-  // Initialiser les clés connues de Firestore
-  _prevFirestoreKeys = Object.keys(cloudState || {});
 
   unsubState = onSnapshot(ref, snap=>{
     const snapData = snap.exists() ? snap.data() : null;
