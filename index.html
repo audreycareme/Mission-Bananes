@@ -960,6 +960,14 @@ function earnedFor(kid,filterFn){
     if(v.st==='ok'){okPt+=t.pts;pochePt+=ptsToPoche(t.pts,date);potPt+=ptsToPot(t.pts,date);}
     else if(v.st==='prov')provPt+=t.pts;
   });
+  // Plafonner l'argent de poche au budget mensuel de l'enfant
+  const budgetPt=BUDGETS_PT[kid]||9999;
+  if(pochePt>budgetPt){
+    // Les bananes au-delà du plafond vont dans le pot, pas dans la poche
+    const excedent=pochePt-budgetPt;
+    pochePt=budgetPt;
+    potPt+=excedent;
+  }
   return{okPt,provPt,pochePt,potPt,
     ok:pochePt*RATE, prov:provPt*RATE}; // ok/prov en € pour compat parents
 }
@@ -973,6 +981,15 @@ function potMonth(mk){
   return total*RATE;
 }
 function earnedMonth(kid,mk){mk=mk||mKey();return earnedFor(kid,d=>mKey(d)===mk)}
+function potSince(fromDate){
+  // Cumul cagnotte depuis une date (pour les objectifs multi-mois)
+  let total=0;
+  KIDS.forEach(k=>{
+    const{potPt}=earnedFor(k,d=>d>=fromDate);
+    total+=potPt;
+  });
+  return total*RATE;
+}
 function earnedWeek(kid,wk){wk=wk||wkKey();return earnedFor(kid,d=>wkKey(d)===wk)}
 function earnedTotal(kid){return earnedFor(kid,null);}
 
@@ -2241,13 +2258,15 @@ function renderParentPot(){
     h+=`<div class="empty" style="padding:1rem 0">Aucun objectif pour l'instant.</div>`;
   }else{
     S.objectives.forEach((obj,i)=>{
-      const pct=Math.min(100,pot/obj.target*100);
-      const atteint=pot>=obj.target;
+      // Cagnotte cumulative depuis la création de l'objectif (pas reset au 1er du mois)
+      const potCumul=potSince(obj.createdAt||'2000-01-01');
+      const pct=Math.min(100,potCumul/obj.target*100);
+      const atteint=potCumul>=obj.target;
       h+=`<div style="background:#fff;border:2.5px solid ${atteint?'var(--ok)':'rgba(26,26,46,.08)'};border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
             <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
-            <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${pot.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
+            <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${potCumul.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
           </div>
           <div style="display:flex;gap:5px;align-items:center">
             ${atteint?`<span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>`:''}
@@ -2691,6 +2710,32 @@ async function subscribeFamilyState(){
     else buildKidView();
   }, err=>console.error('Firebase snapshot error', err));
 }
+
+// Rechargement au retour en premier plan (fix synchro mobile/PWA)
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState === 'visible' && ME && db && currentFamilyId){
+    try{
+      // Recharger l'état depuis Firestore et reconstruire la vue
+      const ref = doc(db,'families',currentFamilyId,'state','app');
+      const snap = await getDoc(ref);
+      const remoteS = snap.exists() ? (snap.data().S || {}) : {};
+      const remoteUpdatedBy = snap.exists() ? snap.data().updatedBy : null;
+      cloudState = remoteS;
+      // Mettre à jour la vue seulement si l'état a changé
+      const localStr = JSON.stringify(S || {});
+      const remoteStr = JSON.stringify(remoteS);
+      if(localStr !== remoteStr){
+        loadCloudIntoState();
+        if(ME === 'Parents') buildParentView();
+        else buildKidView();
+      }
+      // Réabonner au listener si nécessaire
+      if(!unsubState) await subscribeFamilyState();
+    }catch(e){
+      console.error('Erreur rechargement visibilitychange:', e);
+    }
+  }
+});
 
 signInBtn.addEventListener('click', async ()=>{
   if(!CONFIG_READY){
