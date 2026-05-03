@@ -2302,7 +2302,6 @@ function renderParentPot(){
     let soldeCourant=(S.potBalance||0)+potMonth(mk);
     S.objectives.forEach((obj,i)=>{
       if(obj.atteintAt){
-        // Objectif atteint — afficher 100%
         const montantAtteint=obj._paidAmount||obj.target;
         h+=`<div style="background:#fff;border:2.5px solid var(--ok);border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm);opacity:.7">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
@@ -2384,10 +2383,12 @@ function deleteObjective(i){
 }
 
 function potCard(mk){
-  const pot=potMonth(mk||mKey());
+  // Solde cumulé = solde stocké + cagnotte du mois en cours
+  const soldeCumul=(S.potBalance||0)+potMonth(mk||mKey());
   const pct=potPct(todayStr())*100;
-  const obj=(S.objectives||[]).find(o=>pot<o.target)||(S.objectives||[])[0];
-  const potBananes=Math.round(pot/RATE);
+  // Objectif actif = premier non atteint
+  const obj=(S.objectives||[]).find(o=>!o.atteintAt);
+  const potBananes=Math.round(soldeCumul/RATE);
   if(obj){
     const target=Math.round(obj.target/RATE);
     const pctObj=Math.min(100,potBananes/target*100);
