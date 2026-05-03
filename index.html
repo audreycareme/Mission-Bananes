@@ -997,29 +997,13 @@ function earnedTotal(kid){return earnedFor(kid,null);}
 function updatePotBalance(){
   if(!S.objectives)S.objectives=[];
   const currentMk=mKey();
+  const lastMk=S.potLastMonth||null;
 
-  // Migration silencieuse au premier passage
-  if(!S.potInitDone){
-    S.objectives=S.objectives.map(obj=>{
-      if(obj.name && obj.name.includes('Cin')){
-        return{...obj, atteintAt:'2025-04', target:51.30, _paidAmount:51.30};
-      }
-      if(obj.name && obj.name.includes('Prison')){
-        return{...obj, createdAt:'2025-05-01'};
-      }
-      return obj;
-    });
-    S.potBalance=0;
-    S.potLastMonth=currentMk;
-    S.potInitDone=true;
-    saveS();
-    return;
-  }
-
-  const lastMk=S.potLastMonth||currentMk;
-  if(lastMk!==currentMk){
+  // Si on vient de changer de mois, ajouter la cagnotte du mois précédent au solde
+  if(lastMk && lastMk!==currentMk){
     const potGagne=potMonth(lastMk);
     S.potBalance=(S.potBalance||0)+potGagne;
+    // Vérifier si des objectifs sont atteints en cascade
     let solde=S.potBalance;
     S.objectives=S.objectives.map(obj=>{
       if(!obj.atteintAt && solde>=obj.target){
@@ -1029,9 +1013,8 @@ function updatePotBalance(){
       return obj;
     });
     S.potBalance=solde;
-    S.potLastMonth=currentMk;
-    saveS();
   }
+  S.potLastMonth=currentMk;
 }
 
 function pendingCount(){
@@ -2302,22 +2285,15 @@ function renderParentPot(){
     let soldeCourant=(S.potBalance||0)+potMonth(mk);
     S.objectives.forEach((obj,i)=>{
       if(obj.atteintAt){
-        const montantAtteint=obj._paidAmount||obj.target;
+        // Objectif déjà atteint et déduit
         h+=`<div style="background:#fff;border:2.5px solid var(--ok);border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm);opacity:.7">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-            <div>
-              <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
-              <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${montantAtteint.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
-            </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
             <div style="display:flex;gap:5px;align-items:center">
               <span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>
               <button onclick="deleteObjective(${i})" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px">×</button>
             </div>
           </div>
-          <div style="background:var(--bg);border-radius:5px;height:10px;overflow:hidden">
-            <div style="height:100%;width:100%;background:var(--ok);border-radius:5px"></div>
-          </div>
-          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-top:4px;text-align:right">100%</div>
         </div>`;
       } else {
         // Objectif en cours — utiliser le solde courant
@@ -2383,12 +2359,10 @@ function deleteObjective(i){
 }
 
 function potCard(mk){
-  // Solde cumulé = solde stocké + cagnotte du mois en cours
-  const soldeCumul=(S.potBalance||0)+potMonth(mk||mKey());
+  const pot=potMonth(mk||mKey());
   const pct=potPct(todayStr())*100;
-  // Objectif actif = premier non atteint
-  const obj=(S.objectives||[]).find(o=>!o.atteintAt);
-  const potBananes=Math.round(soldeCumul/RATE);
+  const obj=(S.objectives||[]).find(o=>pot<o.target)||(S.objectives||[])[0];
+  const potBananes=Math.round(pot/RATE);
   if(obj){
     const target=Math.round(obj.target/RATE);
     const pctObj=Math.min(100,potBananes/target*100);
