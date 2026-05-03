@@ -1005,7 +1005,10 @@ function updatePotBalance(){
         return{...obj, atteintAt:'2025-04', target:51.30, _paidAmount:51.30};
       }
       if(obj.name && obj.name.includes('Prison')){
-        return{...obj, createdAt:'2025-05-01', atteintAt:undefined};
+        const o=Object.assign({},obj);
+        delete o.atteintAt;
+        o.createdAt='2025-05-01';
+        return o;
       }
       return obj;
     });
