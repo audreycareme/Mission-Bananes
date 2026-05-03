@@ -1002,12 +1002,12 @@ function updatePotBalance(){
   if(S.potInitDone !== 2){
     S.objectives=S.objectives.map(obj=>{
       if(obj.name && obj.name.includes('Cin')){
-        return{...obj, atteintAt:'2025-04', target:51.30, _paidAmount:51.30};
+        return{...obj, atteintAt:'2026-04', target:51.30, _paidAmount:51.30};
       }
       if(obj.name && obj.name.includes('Prison')){
         const o=Object.assign({},obj);
         delete o.atteintAt;
-        o.createdAt='2025-05-01';
+        o.createdAt='2026-05-01';
         return o;
       }
       return obj;
@@ -2379,28 +2379,49 @@ function deleteObjective(i){
 }
 
 function potCard(mk){
-  const pot=potMonth(mk||mKey());
+  const soldeCumul=(S.potBalance||0)+potMonth(mk||mKey());
   const pct=potPct(todayStr())*100;
-  const obj=(S.objectives||[]).find(o=>pot<o.target)||(S.objectives||[])[0];
-  const potBananes=Math.round(pot/RATE);
-  if(obj){
-    const target=Math.round(obj.target/RATE);
+  const potBananes=Math.round(soldeCumul/RATE);
+  const objectives=S.objectives||[];
+  const atteints=objectives.filter(o=>o.atteintAt);
+  const actif=objectives.find(o=>!o.atteintAt);
+  let h=`<div class="pot" style="flex-direction:column;gap:8px;padding-bottom:4px">`;
+  atteints.forEach(obj=>{
+    const montant=(obj._paidAmount||obj.target).toFixed(2).replace('.',',');
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.15)">
+      <div>
+        <div class="pot-lbl" style="margin-bottom:2px">🎉 ${obj.name}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.6)">${montant} € atteint !</div>
+      </div>
+      <div style="font-size:1.3rem">✅</div>
+    </div>`;
+  });
+  if(actif){
+    const target=Math.round(actif.target/RATE);
+    const targetEur=actif.target.toFixed(2).replace('.',',');
     const pctObj=Math.min(100,potBananes/target*100);
-    return`<div class="pot" style="flex-direction:column;gap:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
-        <div><div class="pot-lbl">Cagnotte — ${obj.name}</div><div class="pot-v" style="font-size:1.6rem">${potBananes} <span style="font-size:1rem">/ ${target}</span></div></div>
+    h+=`<div style="width:100%">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div>
+          <div class="pot-lbl">Cagnotte — ${actif.name}</div>
+          <div class="pot-v" style="font-size:1.6rem">${potBananes} <span style="font-size:1rem">/ ${target} 🍌</span></div>
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${soldeCumul.toFixed(2).replace('.',',')} € / ${targetEur} €</div>
+        </div>
         <div style="font-size:1.5rem">${pctObj>=100?'🎉':'🏦'}</div>
       </div>
       <div style="width:100%;background:rgba(255,255,255,.2);border-radius:5px;height:10px;overflow:hidden">
         <div style="height:100%;width:${pctObj.toFixed(1)}%;background:#fff;border-radius:5px;transition:width .4s"></div>
       </div>
-      <div style="font-size:11px;color:rgba(255,255,255,.6);text-align:right">${pctObj.toFixed(0)}% de l'objectif atteint · ${pct.toFixed(0)}% → cagnotte cette semaine</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);text-align:right;margin-top:4px">${pctObj.toFixed(0)}% · ${pct.toFixed(0)}% → cagnotte cette semaine</div>
+    </div>`;
+  } else if(!atteints.length){
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+      <div><div class="pot-lbl">Cagnotte famille</div><div class="pot-v">${potBananes} bananes</div></div>
+      <div style="text-align:right"><div style="font-size:1rem;font-weight:800;color:rgba(255,255,255,.7)">${pct.toFixed(0)}% → cagnotte</div><div class="pot-sub">cette semaine</div></div>
     </div>`;
   }
-  return`<div class="pot">
-    <div><div class="pot-lbl">Cagnotte famille</div><div class="pot-v">${potBananes} bananes</div></div>
-    <div style="text-align:right"><div style="font-size:1rem;font-weight:800;color:rgba(255,255,255,.7)">${pct.toFixed(0)}% → cagnotte</div><div class="pot-sub">cette semaine</div></div>
-  </div>`;
+  h+=`</div>`;
+  return h;
 }
 
 /* ════════════════════════════════
