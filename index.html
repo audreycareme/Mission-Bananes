@@ -997,13 +997,29 @@ function earnedTotal(kid){return earnedFor(kid,null);}
 function updatePotBalance(){
   if(!S.objectives)S.objectives=[];
   const currentMk=mKey();
-  const lastMk=S.potLastMonth||null;
 
-  // Si on vient de changer de mois, ajouter la cagnotte du mois précédent au solde
-  if(lastMk && lastMk!==currentMk){
+  // Migration v2 : forcer Cinéma comme atteint et Prison Island depuis mai 2025
+  if(S.potInitDone !== 2){
+    S.objectives=S.objectives.map(obj=>{
+      if(obj.name && obj.name.includes('Cin')){
+        return{...obj, atteintAt:'2025-04', target:51.30, _paidAmount:51.30};
+      }
+      if(obj.name && obj.name.includes('Prison')){
+        return{...obj, createdAt:'2025-05-01', atteintAt:undefined};
+      }
+      return obj;
+    });
+    S.potBalance=0;
+    S.potLastMonth=currentMk;
+    S.potInitDone=2;
+    saveS();
+    return;
+  }
+
+  const lastMk=S.potLastMonth||currentMk;
+  if(lastMk!==currentMk){
     const potGagne=potMonth(lastMk);
     S.potBalance=(S.potBalance||0)+potGagne;
-    // Vérifier si des objectifs sont atteints en cascade
     let solde=S.potBalance;
     S.objectives=S.objectives.map(obj=>{
       if(!obj.atteintAt && solde>=obj.target){
@@ -1013,8 +1029,9 @@ function updatePotBalance(){
       return obj;
     });
     S.potBalance=solde;
+    S.potLastMonth=currentMk;
+    saveS();
   }
-  S.potLastMonth=currentMk;
 }
 
 function pendingCount(){
