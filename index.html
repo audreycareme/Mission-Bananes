@@ -993,6 +993,30 @@ function potSince(fromDate){
 function earnedWeek(kid,wk){wk=wk||wkKey();return earnedFor(kid,d=>wkKey(d)===wk)}
 function earnedTotal(kid){return earnedFor(kid,null);}
 
+// Mise à jour du solde cagnotte : appelée au chargement et après chaque validation
+function updatePotBalance(){
+  if(!S.objectives)S.objectives=[];
+  const currentMk=mKey();
+  const lastMk=S.potLastMonth||null;
+
+  // Si on vient de changer de mois, ajouter la cagnotte du mois précédent au solde
+  if(lastMk && lastMk!==currentMk){
+    const potGagne=potMonth(lastMk);
+    S.potBalance=(S.potBalance||0)+potGagne;
+    // Vérifier si des objectifs sont atteints en cascade
+    let solde=S.potBalance;
+    S.objectives=S.objectives.map(obj=>{
+      if(!obj.atteintAt && solde>=obj.target){
+        solde-=obj.target;
+        return{...obj,atteintAt:lastMk};
+      }
+      return obj;
+    });
+    S.potBalance=solde;
+  }
+  S.potLastMonth=currentMk;
+}
+
 function pendingCount(){
   const today=todayStr();
   const cutoffPast=new Date();cutoffPast.setDate(cutoffPast.getDate()-7);
@@ -2252,32 +2276,48 @@ function renderParentPot(){
     </div>`;
   });
 
-  // Objectifs
+  // Objectifs — on simule le solde en cascade pour l'affichage
   h+=`<div class="slbl" style="margin-top:1.25rem">🎯 Objectifs</div>`;
   if(!S.objectives.length){
     h+=`<div class="empty" style="padding:1rem 0">Aucun objectif pour l'instant.</div>`;
   }else{
+    // Solde cagnotte = solde stocké + cagnotte du mois en cours (pas encore comptabilisée)
+    let soldeCourant=(S.potBalance||0)+potMonth(mk);
     S.objectives.forEach((obj,i)=>{
-      // Cagnotte cumulative depuis la création de l'objectif (pas reset au 1er du mois)
-      const potCumul=potSince(obj.createdAt||'2000-01-01');
-      const pct=Math.min(100,potCumul/obj.target*100);
-      const atteint=potCumul>=obj.target;
-      h+=`<div style="background:#fff;border:2.5px solid ${atteint?'var(--ok)':'rgba(26,26,46,.08)'};border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <div>
+      if(obj.atteintAt){
+        // Objectif déjà atteint et déduit
+        h+=`<div style="background:#fff;border:2.5px solid var(--ok);border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm);opacity:.7">
+          <div style="display:flex;justify-content:space-between;align-items:center">
             <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
-            <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${potCumul.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
+            <div style="display:flex;gap:5px;align-items:center">
+              <span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>
+              <button onclick="deleteObjective(${i})" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px">×</button>
+            </div>
           </div>
-          <div style="display:flex;gap:5px;align-items:center">
-            ${atteint?`<span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>`:''}
-            <button onclick="deleteObjective(${i})" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px">×</button>
+        </div>`;
+      } else {
+        // Objectif en cours — utiliser le solde courant
+        const montantObj=Math.min(soldeCourant,obj.target);
+        const pct=Math.min(100,montantObj/obj.target*100);
+        const atteint=soldeCourant>=obj.target;
+        if(atteint) soldeCourant-=obj.target; // déduire pour l'objectif suivant
+        h+=`<div style="background:#fff;border:2.5px solid ${atteint?'var(--ok)':'rgba(26,26,46,.08)'};border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
+              <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${montantObj.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
+            </div>
+            <div style="display:flex;gap:5px;align-items:center">
+              ${atteint?`<span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>`:''}
+              <button onclick="deleteObjective(${i})" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px">×</button>
+            </div>
           </div>
-        </div>
-        <div style="background:var(--bg);border-radius:5px;height:10px;overflow:hidden">
-          <div style="height:100%;width:${pct.toFixed(1)}%;background:${atteint?'var(--ok)':'var(--sa)'};border-radius:5px;transition:width .4s"></div>
-        </div>
-        <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-top:4px;text-align:right">${pct.toFixed(0)}%</div>
-      </div>`;
+          <div style="background:var(--bg);border-radius:5px;height:10px;overflow:hidden">
+            <div style="height:100%;width:${pct.toFixed(1)}%;background:${atteint?'var(--ok)':'var(--sa)'};border-radius:5px;transition:width .4s"></div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-top:4px;text-align:right">${pct.toFixed(0)}%</div>
+        </div>`;
+      }
     });
   }
 
@@ -2309,6 +2349,7 @@ function saveObjective(){
   if(!name||!target||target<=0){alert('Remplissez le nom et le montant.');return;}
   if(!S.objectives)S.objectives=[];
   S.objectives.push({name,target,createdAt:todayStr()});
+  updatePotBalance();
   saveS();renderParentPot();
 }
 function deleteObjective(i){
@@ -2596,6 +2637,8 @@ function loadCloudIntoState(){
   }catch(e){
     S = {};
   }
+  // Mettre à jour le solde cagnotte si le mois a changé
+  if(ME==='Parents') updatePotBalance();
 }
 window.loadS = loadCloudIntoState;
 
