@@ -1520,7 +1520,7 @@ function renderDayDetail(kid, date, kc, wk){
       const lbl=slotLbl?t.label+' <span style="font-size:11px;font-weight:700;color:var(--tx3)">('+slotLbl+')</span>':t.label;
       const isPast=date<todayStr();
       const swapBtn=st!=='ok'&&st!=='prov'&&!isPast
-        ?`<button onclick="proposeSwap('${t.id}','${t.slot}','${date}')"
+        ?`<button onclick="event.stopPropagation();proposeSwap('${t.id}','${t.slot}','${date}')"
             style="margin-left:6px;padding:3px 8px;border:1.5px solid var(--sa);border-radius:8px;background:none;cursor:pointer;font-size:11px;font-weight:800;color:var(--sa);font-family:'Nunito',sans-serif">
             🔄 Échanger
           </button>`:'';
@@ -2308,7 +2308,7 @@ function renderParentPlanning(){
       ⭐ Ajouter une tâche exceptionnelle
     </button>
     <div id="except-form-${kid}" style="display:none;background:#fff;border:2.5px solid #f0a500;border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:var(--shadow-sm)">
-      <div style="font-size:13px;font-weight:900;color:#856404;margin-bottom:10px">⭐ Tâche exceptionnelle</div>
+      <div style="font-size:13px;font-weight:900;color:#856404;margin-bottom:10px">⭐ Tâche exceptionnelle — une seule fois</div>
       <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Nom de la tâche</div>
       <input id="except-label-${kid}" type="text" placeholder="ex : Laver la voiture" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
