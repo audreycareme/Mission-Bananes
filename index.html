@@ -998,23 +998,20 @@ function updatePotBalance(){
   if(!S.objectives)S.objectives=[];
   const currentMk=mKey();
 
-  // Migration v2 : forcer Cinéma comme atteint et Prison Island depuis mai 2025
-  if(S.potInitDone !== 2){
+  // Migration silencieuse au premier passage
+  if(!S.potInitDone){
     S.objectives=S.objectives.map(obj=>{
       if(obj.name && obj.name.includes('Cin')){
-        return{...obj, atteintAt:'2026-04', target:51.30, _paidAmount:51.30};
+        return{...obj, atteintAt:'2025-04', target:51.30, _paidAmount:51.30};
       }
       if(obj.name && obj.name.includes('Prison')){
-        const o=Object.assign({},obj);
-        delete o.atteintAt;
-        o.createdAt='2026-05-01';
-        return o;
+        return{...obj, createdAt:'2025-05-01'};
       }
       return obj;
     });
     S.potBalance=0;
     S.potLastMonth=currentMk;
-    S.potInitDone=2;
+    S.potInitDone=true;
     saveS();
     return;
   }
@@ -1070,6 +1067,32 @@ function deleteCustomTask(kid,tid){
   if(!S['custom|'+kid])return;
   delete S['custom|'+kid][tid];
   saveS();renderParentPlanning();
+}
+
+function saveExceptTask(kid){
+  const label=document.getElementById('except-label-'+kid)?.value?.trim();
+  const pts=parseInt(document.getElementById('except-pts-'+kid)?.value)||5;
+  const date=document.getElementById('except-date-'+kid)?.value;
+  if(!label){alert('Donnez un nom à la tâche.');return;}
+  if(!date){alert('Choisissez une date.');return;}
+  if(!S['except|'+kid])S['except|'+kid]={};
+  const id='ex'+Date.now();
+  S['except|'+kid][id]={id,label,pts,date,exceptional:true,period:null};
+  saveS();
+  renderParentKids();
+  alert('Tâche exceptionnelle ajoutée pour '+kid+' le '+date+' !');
+}
+
+function deleteExceptTask(kid,tid){
+  if(!confirm('Supprimer cette tâche exceptionnelle ?'))return;
+  if(!S['except|'+kid])return;
+  delete S['except|'+kid][tid];
+  saveS();renderParentKids();
+}
+
+function toggleExceptForm(kid){
+  const f=document.getElementById('except-form-'+kid);
+  if(f)f.style.display=f.style.display==='none'?'block':'none';
 }
 function toggleAddTask(kid){
   const f=document.getElementById('add-form-'+kid);
@@ -1240,6 +1263,10 @@ function tasksForDay(kid,date){
       return;
     }
   });
+  // Tâches exceptionnelles pour ce jour
+  const excepts=Object.values(S['except|'+kid]||{}).filter(t=>t.date===date);
+  excepts.forEach(t=>tasks.push({...t,isCommon:false,exceptional:true}));
+
   return tasks;
 }
 
@@ -1491,17 +1518,25 @@ function renderDayDetail(kid, date, kc, wk){
       const st=t.slotSt;
       const slotLbl=SLOT_LBL[t.slot]||t.slot;
       const lbl=slotLbl?t.label+' <span style="font-size:11px;font-weight:700;color:var(--tx3)">('+slotLbl+')</span>':t.label;
-      h+=kidCard({label:lbl,pts:t.pts,st,isCommon:true,kc,
+      const isPast=date<todayStr();
+      const swapBtn=st!=='ok'&&st!=='prov'&&!isPast
+        ?`<button onclick="proposeSwap('${t.id}','${t.slot}','${date}')"
+            style="margin-left:6px;padding:3px 8px;border:1.5px solid var(--sa);border-radius:8px;background:none;cursor:pointer;font-size:11px;font-weight:800;color:var(--sa);font-family:'Nunito',sans-serif">
+            🔄 Échanger
+          </button>`:'';
+      h+=kidCard({label:lbl+swapBtn,pts:t.pts,st,isCommon:true,kc,
         onclick:st==='ok'?null:st==='prov'
           ?`kidUncheckSlot('${t.id}','${date}','${t.slot}')`
           :`kidCheckSlot('${t.id}','${date}','${t.slot}','${kid}')`});
     });
   }
+  // Échanges en cours pour cet enfant
+  h+=renderSwapsKid(kid);
   if(myIndiv.length){
     h+=`<div class="slbl">⭐ Mes tâches</div>`;
     myIndiv.forEach(t=>{
       const st=iSt(kid,t.id,date);
-      h+=kidCard({label:t.label,pts:t.pts,st,isCommon:false,kc,period:t.period,
+      h+=kidCard({label:t.label,pts:t.pts,st,isCommon:false,kc,period:t.period,exceptional:!!t.exceptional,
         onclick:st==='ok'?null:st==='prov'?`kidUncheckI('${kid}','${t.id}','${date}')`:
           `kidCheckI('${kid}','${t.id}','${date}')`});
     });
@@ -1516,7 +1551,7 @@ function _navWk(dir){
   renderKidDay(ME, target);
 }
 
-function kidCard({label,pts,st,isCommon,kc,period,onclick}){
+function kidCard({label,pts,st,isCommon,kc,period,onclick,exceptional=false}){
   let stCls='',chkCls='empty',chkIn='',chipHtml='';
   const icon=taskIcon(label);
   if(st==='prov'){
@@ -1529,13 +1564,14 @@ function kidCard({label,pts,st,isCommon,kc,period,onclick}){
     stCls=' st-rej';chkCls='rej';chkIn='✕';
     chipHtml=`<span class="chip err">↩ à refaire</span>`;
   }
+  const exceptBadge=exceptional?`<span class="chip" style="background:#fff3cd;color:#856404;font-weight:800">⭐ Exceptionnel</span>`:'';
   const perLbl=period?`<span class="chip co">${PLBL[period]}</span>`:'';
   const clickAttr=onclick&&st!=='ok'?`onclick="${onclick}"`:'style="cursor:default"';
   return`<div class="tc${isCommon?' com '+kc+'-tc':''}${stCls}${onclick&&st!=='ok'?' click':''}" ${clickAttr}>
     <div class="ticon ${isCommon?'co-ic':kc+'-ic'}">${icon}</div>
     <div class="tbd">
       <div class="tn">${label}</div>
-      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${perLbl}</div>
+      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${exceptBadge}${perLbl}</div>
     </div>
     <div class="chk ${chkCls}" onclick="${onclick&&st!=='ok'?onclick:'void(0)'}">${chkIn}</div>
   </div>`;
@@ -1797,7 +1833,7 @@ function kidCardReadOnly({label,pts,st,isCommon,kc,period}){
     <div class="ticon ${isCommon?'co-ic':kc+'-ic'}">${icon}</div>
     <div class="tbd">
       <div class="tn">${label}</div>
-      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${perLbl}</div>
+      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${exceptBadge}${perLbl}</div>
     </div>
     <div class="chk ${chkCls}" style="cursor:default">${chkIn}</div>
   </div>`;
@@ -1845,6 +1881,9 @@ function renderParentValidation(){
   });
   pending.sort((a,b)=>b.date.localeCompare(a.date));
 
+  // Échanges en attente de validation parent
+  const pendingSwaps=S.swaps?Object.values(S.swaps).filter(sw=>sw.st==='pending_parent'):[];
+
   // Collect already validated tasks (recent — last 7 days)
   const validated=[];
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-7);
@@ -1868,6 +1907,31 @@ function renderParentValidation(){
   validated.sort((a,b)=>b.date.localeCompare(a.date));
 
   let h='';
+
+  // Afficher les échanges en attente
+  if(pendingSwaps.length){
+    const J2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    const Mo2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+    const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return J2[d.getDay()]+' '+d.getDate()+' '+Mo2[d.getMonth()];};
+    h+=`<div style="background:#fff;border:2.5px solid var(--sa);border-radius:var(--r);padding:14px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:900;color:var(--sa);margin-bottom:10px">🔄 ${pendingSwaps.length} échange${pendingSwaps.length>1?'s':''} à valider</div>`;
+    pendingSwaps.forEach(sw=>{
+      const t=COMMON.find(x=>x.id===sw.tid);
+      h+=`<div style="padding:10px;background:var(--bg);border-radius:10px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:800;color:var(--tx);margin-bottom:4px">${t?.label||sw.tid}</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">
+          <strong>${sw.fromKid}</strong> prend la tâche de <strong>${sw.toKid}</strong> le ${fmtD(sw.toDate)}<br>
+          <strong>${sw.toKid}</strong> prend la tâche de <strong>${sw.fromKid}</strong> le ${fmtD(sw.fromDate)}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="parentValidateSwap('${sw.id}')" style="flex:1;padding:8px;background:var(--ok);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif">✓ Valider</button>
+          <button onclick="parentRefuseSwap('${sw.id}')" style="flex:1;padding:8px;background:var(--err);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif">✕ Refuser</button>
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+
   if(!pending.length){
     h=`<div class="empty"><span class="empty-emoji">🎉</span>Tout est validé !<br>Pas de tâche en attente.</div>`;
   }else{
@@ -2239,7 +2303,53 @@ function renderParentPlanning(){
         <button onclick="saveCustomTask('${kid}')" style="flex:1;padding:10px;background:var(--${kc});color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
         <button onclick="toggleAddTask('${kid}')" style="padding:10px 14px;background:none;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--tx2)">Annuler</button>
       </div>
+    </div>
+    <button onclick="toggleExceptForm('${kid}')" style="width:100%;margin-bottom:12px;padding:9px;border:2.5px dashed #f0a500;border-radius:var(--rsm);background:none;cursor:pointer;font-size:13px;font-weight:800;color:#f0a500;font-family:'Nunito',sans-serif">
+      ⭐ Ajouter une tâche exceptionnelle
+    </button>
+    <div id="except-form-${kid}" style="display:none;background:#fff;border:2.5px solid #f0a500;border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:var(--shadow-sm)">
+      <div style="font-size:13px;font-weight:900;color:#856404;margin-bottom:10px">⭐ Tâche exceptionnelle</div>
+      <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Nom de la tâche</div>
+      <input id="except-label-${kid}" type="text" placeholder="ex : Laver la voiture" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Bananes</div>
+          <input id="except-pts-${kid}" type="number" min="1" max="200" value="10" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Date</div>
+          <input id="except-date-${kid}" type="date" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 8px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="saveExceptTask('${kid}')" style="flex:1;padding:10px;background:#f0a500;color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
+        <button onclick="toggleExceptForm('${kid}')" style="padding:10px 14px;background:none;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--tx2)">Annuler</button>
+      </div>
     </div>`;
+
+  // Afficher les tâches exceptionnelles existantes
+  const excepts=Object.values(S['except|'+kid]||{});
+  if(excepts.length){
+    h+=`<div class="slbl" style="color:#856404">⭐ Tâches exceptionnelles</div>`;
+    excepts.forEach(t=>{
+      const ds=t.date;
+      const d=new Date(ds+'T12:00:00');
+      const J=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      const Mo=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+      const fmtD=J[d.getDay()]+' '+d.getDate()+' '+Mo[d.getMonth()];
+      const st=iSt(kid,t.id,ds);
+      const stLbl=st==='ok'?'✓ Faite':st==='prov'?'⏳ En attente':'À faire';
+      const stCol=st==='ok'?'var(--ok)':st==='prov'?'var(--warn)':'var(--tx2)';
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:2px solid #f0a500;border-radius:var(--rsm);margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:var(--tx)">${t.label}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px">${fmtD} · ${t.pts} bananes · <span style="color:${stCol};font-weight:700">${stLbl}</span></div>
+        </div>
+        <button onclick="deleteExceptTask('${kid}','${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px;padding:4px">×</button>
+      </div>`;
+    });
+    h+=`<div style="margin-bottom:12px"></div>`;
+  }
   });
   setPane('planning',h);
 }
@@ -2305,15 +2415,22 @@ function renderParentPot(){
     let soldeCourant=(S.potBalance||0)+potMonth(mk);
     S.objectives.forEach((obj,i)=>{
       if(obj.atteintAt){
-        // Objectif déjà atteint et déduit
+        const montantAtteint=obj._paidAmount||obj.target;
         h+=`<div style="background:#fff;border:2.5px solid var(--ok);border-radius:var(--r);padding:14px;margin-bottom:8px;box-shadow:var(--shadow-sm);opacity:.7">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-size:15px;font-weight:900;color:var(--tx)">${obj.name}</div>
+              <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-top:2px">${montantAtteint.toFixed(2).replace('.',',')} € / ${obj.target.toFixed(2).replace('.',',')} €</div>
+            </div>
             <div style="display:flex;gap:5px;align-items:center">
               <span style="font-size:11px;font-weight:900;background:var(--ok-l);color:var(--ok);padding:3px 8px;border-radius:20px">🎉 Atteint !</span>
               <button onclick="deleteObjective(${i})" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px">×</button>
             </div>
           </div>
+          <div style="background:var(--bg);border-radius:5px;height:10px;overflow:hidden">
+            <div style="height:100%;width:100%;background:var(--ok);border-radius:5px"></div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--tx3);margin-top:4px;text-align:right">100%</div>
         </div>`;
       } else {
         // Objectif en cours — utiliser le solde courant
@@ -2385,7 +2502,10 @@ function potCard(mk){
   const objectives=S.objectives||[];
   const atteints=objectives.filter(o=>o.atteintAt);
   const actif=objectives.find(o=>!o.atteintAt);
+
   let h=`<div class="pot" style="flex-direction:column;gap:8px;padding-bottom:4px">`;
+
+  // Objectifs atteints (jusqu'à suppression par les parents)
   atteints.forEach(obj=>{
     const montant=(obj._paidAmount||obj.target).toFixed(2).replace('.',',');
     h+=`<div style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.15)">
@@ -2396,6 +2516,8 @@ function potCard(mk){
       <div style="font-size:1.3rem">✅</div>
     </div>`;
   });
+
+  // Objectif en cours
   if(actif){
     const target=Math.round(actif.target/RATE);
     const targetEur=actif.target.toFixed(2).replace('.',',');
@@ -2405,7 +2527,7 @@ function potCard(mk){
         <div>
           <div class="pot-lbl">Cagnotte — ${actif.name}</div>
           <div class="pot-v" style="font-size:1.6rem">${potBananes} <span style="font-size:1rem">/ ${target} 🍌</span></div>
-          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${soldeCumul.toFixed(2).replace('.',',')} € / ${targetEur} €</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px">${(soldeCumul).toFixed(2).replace('.',',')} € / ${targetEur} €</div>
         </div>
         <div style="font-size:1.5rem">${pctObj>=100?'🎉':'🏦'}</div>
       </div>
@@ -2420,6 +2542,7 @@ function potCard(mk){
       <div style="text-align:right"><div style="font-size:1rem;font-weight:800;color:rgba(255,255,255,.7)">${pct.toFixed(0)}% → cagnotte</div><div class="pot-sub">cette semaine</div></div>
     </div>`;
   }
+
   h+=`</div>`;
   return h;
 }
@@ -2431,6 +2554,196 @@ function kidCheckI(kid,tid,date){setISt(kid,tid,date,'prov');saveS();renderKidDa
 function kidUncheckI(kid,tid,date){setISt(kid,tid,date,null);saveS();renderKidDay(kid,date);}
 function kidCheckSlot(tid,date,slot,kid){ccSet(tid,date,slot,kid,'prov');saveS();fillPane(_activeTab);}
 function kidUncheckSlot(tid,date,slot){ccSet(tid,date,slot,null,null);saveS();fillPane(_activeTab);}
+
+/* ════════════════════════════════
+   ÉCHANGES DE TÂCHES
+════════════════════════════════ */
+function proposeSwap(tid,slot,fromDate){
+  // Trouver les autres enfants qui ont la même tâche sur d'autres dates
+  const options=[];
+  KIDS.filter(k=>k!==ME).forEach(toKid=>{
+    // Chercher les dates où toKid a cette tâche dans les 14 prochains jours
+    const today=todayStr();
+    const todayD=new Date(today+'T12:00:00');
+    for(let i=0;i<=14;i++){
+      const d=new Date(todayD);d.setDate(d.getDate()+i);
+      const ds=d2s(d);
+      if(ds===fromDate)continue;
+      const dow=d.getDay();
+      const t=COMMON.find(x=>x.id===tid);
+      if(!t)continue;
+      const daySlots=t.slots[dow]||[];
+      daySlots.forEach(s=>{
+        if(csGet(tid,ds,s)===toKid){
+          options.push({toKid,toDate:ds,toSlot:s});
+        }
+      });
+    }
+  });
+  if(!options.length){
+    alert('Aucun échange possible — personne d\'autre n\'a cette tâche dans les 14 prochains jours.');
+    return;
+  }
+  // Afficher modal de choix
+  showSwapModal(tid,slot,fromDate,options);
+}
+
+function showSwapModal(tid,slot,fromDate,options){
+  const t=COMMON.find(x=>x.id===tid);
+  const J=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const Mo=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  const fmtDate=ds=>{const d=new Date(ds+'T12:00:00');return J[d.getDay()]+' '+d.getDate()+' '+Mo[d.getMonth()];};
+  const SLOT_LBL2={M:'Matin',J:'Journée',S:'Soir'};
+
+  let optsHtml=options.map((o,i)=>`
+    <div onclick="confirmSwap('${tid}','${slot}','${fromDate}','${o.toKid}','${o.toDate}','${o.toSlot}',this)"
+      style="padding:12px;border:2px solid rgba(26,26,46,.1);border-radius:10px;cursor:pointer;margin-bottom:8px;transition:all .15s"
+      onmouseover="this.style.borderColor='var(--sa)'" onmouseout="this.style.borderColor='rgba(26,26,46,.1)'">
+      <div style="font-weight:800;font-size:14px">${o.toKid}</div>
+      <div style="font-size:12px;color:var(--tx2)">${fmtDate(o.toDate)} — ${SLOT_LBL2[o.toSlot]||o.toSlot}</div>
+    </div>`).join('');
+
+  const modal=document.createElement('div');
+  modal.id='swap-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML=`<div style="background:#fff;border-radius:16px;padding:20px;max-width:360px;width:100%;max-height:80vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:900;margin-bottom:4px">🔄 Proposer un échange</div>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:16px">${t?.label} — ${fmtDate(fromDate)}</div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">Choisir avec qui échanger :</div>
+    ${optsHtml}
+    <button onclick="document.getElementById('swap-modal').remove()"
+      style="width:100%;padding:10px;border:2px solid rgba(26,26,46,.15);border-radius:10px;background:none;cursor:pointer;font-size:13px;font-weight:700;color:var(--tx2);font-family:'Nunito',sans-serif;margin-top:4px">
+      Annuler
+    </button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmSwap(tid,slot,fromDate,toKid,toDate,toSlot){
+  document.getElementById('swap-modal')?.remove();
+  const id='sw'+Date.now();
+  if(!S.swaps)S.swaps={};
+  S.swaps[id]={
+    id,tid,
+    fromKid:ME,fromDate,fromSlot:slot,
+    toKid,toDate,toSlot,
+    st:'pending_kid', // en attente acceptation enfant
+    createdAt:todayStr()
+  };
+  saveS();
+  renderKidDay(ME,_viewDate||todayStr());
+  alert(`Demande d'échange envoyée à ${toKid} ! ⏳`);
+}
+
+function acceptSwap(swapId){
+  if(!S.swaps||!S.swaps[swapId])return;
+  S.swaps[swapId].st='pending_parent';
+  saveS();
+  renderKidDay(ME,_viewDate||todayStr());
+}
+
+function refuseSwap(swapId){
+  if(!S.swaps||!S.swaps[swapId])return;
+  S.swaps[swapId].st='refused_kid';
+  saveS();
+  renderKidDay(ME,_viewDate||todayStr());
+}
+
+function parentValidateSwap(swapId){
+  if(!S.swaps||!S.swaps[swapId])return;
+  const sw=S.swaps[swapId];
+  // Échanger les assignations dans csGet/csSet
+  csSet(sw.tid,sw.fromDate,sw.fromSlot,sw.toKid);
+  csSet(sw.tid,sw.toDate,sw.toSlot,sw.fromKid);
+  // Aussi échanger les entrées cc si elles existent
+  const ccFrom=S['cc|'+sw.tid+'|'+sw.fromDate+'|'+sw.fromSlot];
+  const ccTo=S['cc|'+sw.tid+'|'+sw.toDate+'|'+sw.toSlot];
+  if(ccFrom)S['cc|'+sw.tid+'|'+sw.toDate+'|'+sw.toSlot]={...ccFrom,by:sw.fromKid};
+  else delete S['cc|'+sw.tid+'|'+sw.toDate+'|'+sw.toSlot];
+  if(ccTo)S['cc|'+sw.tid+'|'+sw.fromDate+'|'+sw.fromSlot]={...ccTo,by:sw.toKid};
+  else delete S['cc|'+sw.tid+'|'+sw.fromDate+'|'+sw.fromSlot];
+  S.swaps[swapId].st='done';
+  saveS();
+  buildParentView();
+}
+
+function parentRefuseSwap(swapId){
+  if(!S.swaps||!S.swaps[swapId])return;
+  S.swaps[swapId].st='refused_parent';
+  saveS();
+  buildParentView();
+}
+
+function renderSwapsKid(kid){
+  if(!S.swaps)return'';
+  const swaps=Object.values(S.swaps).filter(sw=>
+    (sw.fromKid===kid||sw.toKid===kid) && !['done','refused_kid','refused_parent'].includes(sw.st)
+  );
+  if(!swaps.length)return'';
+  const J=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const Mo=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  const fmtDate=ds=>{const d=new Date(ds+'T12:00:00');return J[d.getDay()]+' '+d.getDate()+' '+Mo[d.getMonth()];};
+  let h=`<div class="slbl">🔄 Échanges en cours</div>`;
+  swaps.forEach(sw=>{
+    const t=COMMON.find(x=>x.id===sw.tid);
+    if(sw.toKid===kid && sw.st==='pending_kid'){
+      // Demande reçue — à accepter ou refuser
+      h+=`<div style="background:#fff;border:2.5px solid var(--sa);border-radius:var(--r);padding:14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:900;color:var(--tx);margin-bottom:4px">📩 ${sw.fromKid} te propose un échange</div>
+        <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">
+          ${t?.label}<br>
+          Il·elle prend ta tâche du <strong>${fmtDate(sw.toDate)}</strong><br>
+          Tu prends la sienne du <strong>${fmtDate(sw.fromDate)}</strong>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="acceptSwap('${sw.id}')" style="flex:1;padding:8px;background:var(--ok);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif">✓ Accepter</button>
+          <button onclick="refuseSwap('${sw.id}')" style="flex:1;padding:8px;background:var(--err);color:#fff;border:none;border-radius:8px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif">✕ Refuser</button>
+        </div>
+      </div>`;
+    } else if(sw.fromKid===kid && sw.st==='pending_kid'){
+      // Demande envoyée — en attente
+      h+=`<div style="background:#fff;border:2px solid rgba(26,26,46,.1);border-radius:var(--r);padding:14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:900;color:var(--tx2)">⏳ En attente de ${sw.toKid}</div>
+        <div style="font-size:12px;color:var(--tx3)">${t?.label} — ${fmtDate(sw.fromDate)} ↔ ${fmtDate(sw.toDate)}</div>
+      </div>`;
+    } else if(sw.fromKid===kid && sw.st==='pending_parent'){
+      h+=`<div style="background:#fff;border:2px solid rgba(26,26,46,.1);border-radius:var(--r);padding:14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:900;color:var(--tx2)">⏳ En attente des parents</div>
+        <div style="font-size:12px;color:var(--tx3)">${t?.label} — ${fmtDate(sw.fromDate)} ↔ ${fmtDate(sw.toDate)}</div>
+      </div>`;
+    } else if(sw.toKid===kid && sw.st==='pending_parent'){
+      h+=`<div style="background:#fff;border:2px solid rgba(26,26,46,.1);border-radius:var(--r);padding:14px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:900;color:var(--tx2)">⏳ En attente des parents</div>
+        <div style="font-size:12px;color:var(--tx3)">${t?.label} — ${fmtDate(sw.fromDate)} ↔ ${fmtDate(sw.toDate)}</div>
+      </div>`;
+    }
+  });
+  // Refus récents
+  Object.values(S.swaps).filter(sw=>sw.fromKid===kid && sw.st==='refused_kid').forEach(sw=>{
+    const t=COMMON.find(x=>x.id===sw.tid);
+    h+=`<div style="background:#fff;border:2px solid var(--err);border-radius:var(--r);padding:14px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:900;color:var(--err)">✕ ${sw.toKid} a refusé l'échange</div>
+      <div style="font-size:12px;color:var(--tx3)">${t?.label}</div>
+      <button onclick="deleteSwap('${sw.id}')" style="margin-top:6px;padding:4px 10px;border:none;background:rgba(26,26,46,.08);border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;font-family:'Nunito',sans-serif">OK, supprimer</button>
+    </div>`;
+  });
+  Object.values(S.swaps).filter(sw=>(sw.fromKid===kid||sw.toKid===kid) && sw.st==='refused_parent').forEach(sw=>{
+    const t=COMMON.find(x=>x.id===sw.tid);
+    h+=`<div style="background:#fff;border:2px solid var(--err);border-radius:var(--r);padding:14px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:900;color:var(--err)">✕ Les parents ont refusé l'échange</div>
+      <div style="font-size:12px;color:var(--tx3)">${t?.label}</div>
+      <button onclick="deleteSwap('${sw.id}')" style="margin-top:6px;padding:4px 10px;border:none;background:rgba(26,26,46,.08);border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;font-family:'Nunito',sans-serif">OK, supprimer</button>
+    </div>`;
+  });
+  return h;
+}
+
+function deleteSwap(swapId){
+  if(!S.swaps)return;
+  delete S.swaps[swapId];
+  saveS();
+  renderKidDay(ME,_viewDate||todayStr());
+}
 
 /* ════════════════════════════════
    NOTIFICATIONS
