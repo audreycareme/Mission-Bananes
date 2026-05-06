@@ -1734,6 +1734,54 @@ function renderParentKids(){
       h+=`<div class="empty"><span class="empty-emoji">🌈</span>Aucune tâche ce jour !</div>`;
     }
 
+    // Formulaire tâche exceptionnelle
+    h+=`<div style="margin-top:1rem">
+      <button onclick="toggleExceptForm('${kid}')" style="width:100%;margin-bottom:8px;padding:9px;border:2.5px dashed #f0a500;border-radius:var(--rsm);background:none;cursor:pointer;font-size:13px;font-weight:800;color:#f0a500;font-family:'Nunito',sans-serif">
+        ⭐ Ajouter une tâche exceptionnelle
+      </button>
+      <div id="except-form-${kid}" style="display:none;background:#fff;border:2.5px solid #f0a500;border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:var(--shadow-sm)">
+        <div style="font-size:13px;font-weight:900;color:#856404;margin-bottom:10px">⭐ Tâche exceptionnelle</div>
+        <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Nom de la tâche</div>
+        <input id="except-label-${kid}" type="text" placeholder="ex : Laver la voiture" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Bananes</div>
+            <input id="except-pts-${kid}" type="number" min="1" max="200" value="10" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Date</div>
+            <input id="except-date-${kid}" type="date" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 8px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="saveExceptTask('${kid}')" style="flex:1;padding:10px;background:#f0a500;color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
+          <button onclick="toggleExceptForm('${kid}')" style="padding:10px 14px;background:none;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--tx2)">Annuler</button>
+        </div>
+      </div>`;
+    // Tâches exceptionnelles existantes
+    const excepts=Object.values(S['except|'+kid]||{});
+    if(excepts.length){
+      h+=`<div class="slbl" style="color:#856404">⭐ Tâches exceptionnelles</div>`;
+      excepts.forEach(t=>{
+        const ds=t.date;
+        const d=new Date(ds+'T12:00:00');
+        const J2=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+        const Mo2=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+        const fmtD=J2[d.getDay()]+' '+d.getDate()+' '+Mo2[d.getMonth()];
+        const st2=iSt(kid,t.id,ds);
+        const stLbl=st2==='ok'?'✓ Faite':st2==='prov'?'⏳ En attente':'À faire';
+        const stCol=st2==='ok'?'var(--ok)':st2==='prov'?'var(--warn)':'var(--tx2)';
+        h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:2px solid #f0a500;border-radius:var(--rsm);margin-bottom:6px">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:var(--tx)">${t.label}</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:2px">${fmtD} · ${t.pts} bananes · <span style="color:${stCol};font-weight:700">${stLbl}</span></div>
+          </div>
+          <button onclick="deleteExceptTask('${kid}','${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px;padding:4px">×</button>
+        </div>`;
+      });
+    }
+    h+=`</div>`;
+
     // Nav jours
     setTimeout(()=>{
       const bp=document.getElementById('btn-prev-wk');
@@ -1833,7 +1881,7 @@ function kidCardReadOnly({label,pts,st,isCommon,kc,period}){
     <div class="ticon ${isCommon?'co-ic':kc+'-ic'}">${icon}</div>
     <div class="tbd">
       <div class="tn">${label}</div>
-      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${exceptBadge}${perLbl}</div>
+      <div class="tm">${pts} banane${pts>1?'s':''}  ${chipHtml}${perLbl}</div>
     </div>
     <div class="chk ${chkCls}" style="cursor:default">${chkIn}</div>
   </div>`;
@@ -2303,53 +2351,7 @@ function renderParentPlanning(){
         <button onclick="saveCustomTask('${kid}')" style="flex:1;padding:10px;background:var(--${kc});color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
         <button onclick="toggleAddTask('${kid}')" style="padding:10px 14px;background:none;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--tx2)">Annuler</button>
       </div>
-    </div>
-    <button onclick="toggleExceptForm('${kid}')" style="width:100%;margin-bottom:12px;padding:9px;border:2.5px dashed #f0a500;border-radius:var(--rsm);background:none;cursor:pointer;font-size:13px;font-weight:800;color:#f0a500;font-family:'Nunito',sans-serif">
-      ⭐ Ajouter une tâche exceptionnelle
-    </button>
-    <div id="except-form-${kid}" style="display:none;background:#fff;border:2.5px solid #f0a500;border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:var(--shadow-sm)">
-      <div style="font-size:13px;font-weight:900;color:#856404;margin-bottom:10px">⭐ Tâche exceptionnelle — une seule fois</div>
-      <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Nom de la tâche</div>
-      <input id="except-label-${kid}" type="text" placeholder="ex : Laver la voiture" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none;margin-bottom:8px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div>
-          <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Bananes</div>
-          <input id="except-pts-${kid}" type="number" min="1" max="200" value="10" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 12px;font-size:13px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
-        </div>
-        <div>
-          <div style="font-size:12px;font-weight:800;color:var(--tx2);margin-bottom:4px">Date</div>
-          <input id="except-date-${kid}" type="date" style="width:100%;height:40px;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);padding:0 8px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--tx);background:var(--bg);outline:none">
-        </div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button onclick="saveExceptTask('${kid}')" style="flex:1;padding:10px;background:#f0a500;color:#fff;border:none;border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif">✓ Ajouter</button>
-        <button onclick="toggleExceptForm('${kid}')" style="padding:10px 14px;background:none;border:2.5px solid rgba(26,26,46,.1);border-radius:var(--rsm);font-size:13px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--tx2)">Annuler</button>
-      </div>
     </div>`;
-
-  // Afficher les tâches exceptionnelles existantes
-  const excepts=Object.values(S['except|'+kid]||{});
-  if(excepts.length){
-    h+=`<div class="slbl" style="color:#856404">⭐ Tâches exceptionnelles</div>`;
-    excepts.forEach(t=>{
-      const ds=t.date;
-      const d=new Date(ds+'T12:00:00');
-      const J=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-      const Mo=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
-      const fmtD=J[d.getDay()]+' '+d.getDate()+' '+Mo[d.getMonth()];
-      const st=iSt(kid,t.id,ds);
-      const stLbl=st==='ok'?'✓ Faite':st==='prov'?'⏳ En attente':'À faire';
-      const stCol=st==='ok'?'var(--ok)':st==='prov'?'var(--warn)':'var(--tx2)';
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff;border:2px solid #f0a500;border-radius:var(--rsm);margin-bottom:6px">
-        <div>
-          <div style="font-size:13px;font-weight:800;color:var(--tx)">${t.label}</div>
-          <div style="font-size:11px;color:var(--tx2);margin-top:2px">${fmtD} · ${t.pts} bananes · <span style="color:${stCol};font-weight:700">${stLbl}</span></div>
-        </div>
-        <button onclick="deleteExceptTask('${kid}','${t.id}')" style="background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px;padding:4px">×</button>
-      </div>`;
-    });
-    h+=`<div style="margin-bottom:12px"></div>`;
-  }
   });
   setPane('planning',h);
 }
