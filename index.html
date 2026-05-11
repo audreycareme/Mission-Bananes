@@ -1914,8 +1914,8 @@ function renderParentValidation(){
       const[,kid,tid,date]=k.split('|');
       if(date>today)return;
       if(date<cutoffPastStr)return; // ignorer les entrées de plus de 7 jours
-      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid);
-      if(t)pending.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts});
+      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid) || Object.values(S['except|'+kid]||{}).find(x=>x.id===tid);
+      if(t)pending.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts,exceptional:!!t.exceptional});
     }
     if(k.startsWith('cc|')&&S[k]?.st==='prov'){
       const parts=k.split('|');
@@ -1940,8 +1940,8 @@ function renderParentValidation(){
     if(k.startsWith('i|')&&S[k]==='ok'){
       const[,kid,tid,date]=k.split('|');
       if(date<cutoffStr)return;
-      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid);
-      if(t)validated.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts});
+      const t=(INDIV[kid]||[]).find(x=>x.id===tid) || Object.values(S['custom|'+kid]||{}).find(x=>x.id===tid) || Object.values(S['except|'+kid]||{}).find(x=>x.id===tid);
+      if(t)validated.push({type:'indiv',kid,tid,date,label:t.label,pts:t.pts,exceptional:!!t.exceptional});
     }
     if(k.startsWith('cc|')&&S[k]?.st==='ok'){
       const parts=k.split('|');
